@@ -42,7 +42,7 @@ WEB CLONER ULTIME est un cloneur de site intelligent qui utilise une IA adaptati
 
 ```bash
 # 1. Cloner le dépôt
-git clone https://github.com/votre-compte/web-cloner-ultime.git
+git clone https://github.com/ronnymboumba1-maker/Web-cloner-IA-Ultime-avec-IA-Adaptive-Adaptive-
 cd web-cloner-ultime
 
 # 2. Créer un environnement virtuel
